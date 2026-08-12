@@ -10,7 +10,8 @@
     "build": "npm run build --workspaces",
     "test": "npm run test --workspaces --if-present",
     "test:e2e": "npm run test:e2e --workspace api",
-    "lint": "npm run lint --workspaces --if-present"
+    "lint": "npm run lint --workspaces --if-present",
+    "db:setup": "npm run prisma:generate --workspace api && npm run db:deploy --workspace api && npm run db:seed --workspace api"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"
