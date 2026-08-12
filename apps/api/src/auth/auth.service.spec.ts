@@ -25,8 +25,10 @@ describe('AuthService', () => {
     service = module.get(AuthService);
   });
 
-  it('returns a token and user for the demo administrator', () => {
-    expect(service.login({ username: 'Admin', password: 'admin123' })).toEqual({
+  it('returns a token and user for the demo administrator', async () => {
+    await expect(
+      service.login({ username: 'Admin', password: 'admin123' }),
+    ).resolves.toEqual({
       accessToken: 'test-token',
       user: {
         id: 1,
@@ -37,9 +39,9 @@ describe('AuthService', () => {
     });
   });
 
-  it('rejects invalid credentials', () => {
-    expect(() =>
+  it('rejects invalid credentials', async () => {
+    await expect(
       service.login({ username: 'Admin', password: 'incorrect' }),
-    ).toThrow(UnauthorizedException);
+    ).rejects.toThrow(UnauthorizedException);
   });
 });

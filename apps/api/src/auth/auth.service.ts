@@ -1,7 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { scryptSync, timingSafeEqual } from 'node:crypto';
+import { scrypt, scryptSync, timingSafeEqual } from 'node:crypto';
 import { LoginDto } from './dto/login.dto';
 
 const PASSWORD_SALT = 'peopleflow-local-demo';
@@ -15,21 +15,23 @@ export interface AuthenticatedUser {
 
 @Injectable()
 export class AuthService {
+  private readonly expectedPasswordHash: Buffer;
+
   constructor(
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
-  ) {}
-
-  login(credentials: LoginDto) {
-    const username =
-      this.configService.get<string>('DEMO_ADMIN_USERNAME') ?? 'Admin';
+  ) {
     const password =
       this.configService.get<string>('DEMO_ADMIN_PASSWORD') ?? 'admin123';
+    this.expectedPasswordHash = scryptSync(password, PASSWORD_SALT, 64);
+  }
 
-    if (
-      credentials.username !== username ||
-      !this.passwordsMatch(credentials.password, password)
-    ) {
+  async login(credentials: LoginDto) {
+    const username =
+      this.configService.get<string>('DEMO_ADMIN_USERNAME') ?? 'Admin';
+    const passwordMatches = await this.passwordsMatch(credentials.password);
+
+    if (credentials.username !== username || !passwordMatches) {
       throw new UnauthorizedException('Invalid username or password');
     }
 
@@ -50,9 +52,16 @@ export class AuthService {
     };
   }
 
-  private passwordsMatch(candidate: string, expected: string): boolean {
-    const candidateHash = scryptSync(candidate, PASSWORD_SALT, 64);
-    const expectedHash = scryptSync(expected, PASSWORD_SALT, 64);
-    return timingSafeEqual(candidateHash, expectedHash);
+  private passwordsMatch(candidate: string): Promise<boolean> {
+    return new Promise((resolve, reject) => {
+      scrypt(candidate, PASSWORD_SALT, 64, (error, candidateHash) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+
+        resolve(timingSafeEqual(candidateHash, this.expectedPasswordHash));
+      });
+    });
   }
 }

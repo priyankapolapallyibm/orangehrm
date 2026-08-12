@@ -47,6 +47,20 @@ describe('AppController (e2e)', () => {
       .expect(401);
   });
 
+  it('/api/auth/login rate limits repeated attempts', async () => {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await request(app.getHttpServer())
+        .post('/api/auth/login')
+        .send({ username: 'Admin', password: 'wrong' })
+        .expect(401);
+    }
+
+    await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .send({ username: 'Admin', password: 'wrong' })
+      .expect(429);
+  });
+
   afterEach(async () => {
     await app.close();
   });
