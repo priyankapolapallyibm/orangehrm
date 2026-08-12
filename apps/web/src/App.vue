@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import EmployeeManager from './components/EmployeeManager.vue'
 import { login, type User } from './services/auth'
 
 const username = ref('')
@@ -7,6 +8,8 @@ const password = ref('')
 const error = ref('')
 const loading = ref(false)
 const currentUser = ref<User | null>(null)
+const accessToken = ref('')
+const currentPage = ref<'dashboard' | 'employees'>('dashboard')
 
 const modules = [
   { name: 'Employees', description: 'Manage employee profiles', icon: 'PE' },
@@ -22,6 +25,7 @@ async function submitLogin() {
   try {
     const response = await login(username.value.trim(), password.value)
     currentUser.value = response.user
+    accessToken.value = response.accessToken
     password.value = ''
   } catch (requestError) {
     error.value =
@@ -33,6 +37,8 @@ async function submitLogin() {
 
 function logout() {
   currentUser.value = null
+  accessToken.value = ''
+  currentPage.value = 'dashboard'
   username.value = ''
 }
 </script>
@@ -105,12 +111,27 @@ function logout() {
         <strong>PeopleFlow</strong>
       </div>
       <nav aria-label="Main navigation">
-        <a href="#" class="active">Dashboard</a>
-        <a v-for="module in modules" :key="module.name" href="#">{{ module.name }}</a>
+        <button
+          type="button"
+          :class="{ active: currentPage === 'dashboard' }"
+          @click="currentPage = 'dashboard'"
+        >
+          Dashboard
+        </button>
+        <button
+          v-for="module in modules"
+          :key="module.name"
+          type="button"
+          :class="{ active: currentPage === 'employees' && module.name === 'Employees' }"
+          :disabled="module.name !== 'Employees'"
+          @click="module.name === 'Employees' && (currentPage = 'employees')"
+        >
+          {{ module.name }}
+        </button>
       </nav>
     </aside>
 
-    <main class="dashboard">
+    <main v-if="currentPage === 'dashboard'" class="dashboard">
       <header>
         <div>
           <p class="eyebrow accent">Administrator workspace</p>
@@ -133,14 +154,30 @@ function logout() {
       <section aria-labelledby="modules-title">
         <h2 id="modules-title" class="section-title">Modules</h2>
         <div class="module-grid">
-          <article v-for="module in modules" :key="module.name">
+          <article
+            v-for="module in modules"
+            :key="module.name"
+            :class="{ available: module.name === 'Employees' }"
+            @click="module.name === 'Employees' && (currentPage = 'employees')"
+          >
             <span class="module-icon" aria-hidden="true">{{ module.icon }}</span>
             <h3>{{ module.name }}</h3>
             <p>{{ module.description }}</p>
-            <span class="coming-soon">Coming next</span>
+            <button
+              v-if="module.name === 'Employees'"
+              class="text-button"
+              type="button"
+              @click.stop="currentPage = 'employees'"
+            >
+              Open module
+            </button>
+            <span v-else class="coming-soon">Coming next</span>
           </article>
         </div>
       </section>
+    </main>
+    <main v-else class="dashboard">
+      <EmployeeManager :token="accessToken" />
     </main>
   </div>
 </template>

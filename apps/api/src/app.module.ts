@@ -5,6 +5,8 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AppController } from './app.controller';
 import { AuthModule } from './auth/auth.module';
 import { validateEnvironment } from './config/environment';
+import { DatabaseModule } from './database/database.module';
+import { EmployeesModule } from './employees/employees.module';
 
 @Module({
   imports: [
@@ -19,7 +21,9 @@ import { validateEnvironment } from './config/environment';
         limit: 100,
       },
     ]),
+    DatabaseModule,
     AuthModule,
+    EmployeesModule,
   ],
   controllers: [AppController],
   providers: [

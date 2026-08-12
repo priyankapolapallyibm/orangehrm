@@ -8,6 +8,8 @@ current first release includes:
 - A NestJS authentication API
 - A local administrator account
 - An authenticated dashboard shell
+- SQLite persistence with Prisma migrations and seed data
+- Employee listing, search, creation, editing, and deletion
 - Backend unit and API integration tests
 - Frontend component tests
 
@@ -24,6 +26,7 @@ Install all workspace dependencies:
 
 ```powershell
 npm install
+npm run db:setup
 ```
 
 Start the API and web application:
@@ -48,6 +51,7 @@ npm run dev
 npm run build
 npm test
 npm run test:e2e
+npm run db:setup
 ```
 
 ## Configuration
@@ -57,5 +61,9 @@ want to override the API port, browser origin, JWT secret, or demo credentials.
 A production deployment must provide a JWT secret containing at least 32
 characters and explicit administrator credentials with a password of at least
 12 characters. The public local credentials are not accepted as implicit
-production defaults. Persistent PostgreSQL users will be introduced with the
-employee-management foundation.
+production defaults.
+
+The current local database is SQLite at `apps/api/prisma/dev.db`. It is generated
+locally and is not committed. Prisma migrations and seed data are committed so
+each developer and CI run can recreate the same database. PostgreSQL will replace
+SQLite when the hosted Dev environment is introduced.

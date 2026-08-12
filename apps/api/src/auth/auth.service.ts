@@ -1,10 +1,11 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { scrypt, scryptSync, timingSafeEqual } from 'node:crypto';
+import { PrismaService } from '../database/prisma.service';
 import { LoginDto } from './dto/login.dto';
 
-const PASSWORD_SALT = 'peopleflow-local-demo';
+const DUMMY_SALT = 'peopleflow-invalid-user';
+const DUMMY_HASH = scryptSync('invalid-password', DUMMY_SALT, 64);
 
 export interface AuthenticatedUser {
   id: number;
@@ -15,31 +16,30 @@ export interface AuthenticatedUser {
 
 @Injectable()
 export class AuthService {
-  private readonly expectedPasswordHash: Buffer;
-
   constructor(
     private readonly jwtService: JwtService,
-    private readonly configService: ConfigService,
-  ) {
-    const password =
-      this.configService.get<string>('DEMO_ADMIN_PASSWORD') ?? 'admin123';
-    this.expectedPasswordHash = scryptSync(password, PASSWORD_SALT, 64);
-  }
+    private readonly prisma: PrismaService,
+  ) {}
 
   async login(credentials: LoginDto) {
-    const username =
-      this.configService.get<string>('DEMO_ADMIN_USERNAME') ?? 'Admin';
-    const passwordMatches = await this.passwordsMatch(credentials.password);
+    const account = await this.prisma.user.findUnique({
+      where: { username: credentials.username },
+    });
+    const passwordMatches = await this.passwordsMatch(
+      credentials.password,
+      account?.passwordSalt ?? DUMMY_SALT,
+      account ? Buffer.from(account.passwordHash, 'base64') : DUMMY_HASH,
+    );
 
-    if (credentials.username !== username || !passwordMatches) {
+    if (!account?.active || !passwordMatches) {
       throw new UnauthorizedException('Invalid username or password');
     }
 
     const user: AuthenticatedUser = {
-      id: 1,
-      username,
-      displayName: 'System Administrator',
-      role: 'ADMIN',
+      id: account.id,
+      username: account.username,
+      displayName: account.displayName,
+      role: account.role,
     };
 
     return {
@@ -52,15 +52,22 @@ export class AuthService {
     };
   }
 
-  private passwordsMatch(candidate: string): Promise<boolean> {
+  private passwordsMatch(
+    candidate: string,
+    salt: string,
+    expectedHash: Buffer,
+  ): Promise<boolean> {
     return new Promise((resolve, reject) => {
-      scrypt(candidate, PASSWORD_SALT, 64, (error, candidateHash) => {
+      scrypt(candidate, salt, 64, (error, candidateHash) => {
         if (error) {
           reject(error);
           return;
         }
 
-        resolve(timingSafeEqual(candidateHash, this.expectedPasswordHash));
+        resolve(
+          candidateHash.length === expectedHash.length &&
+            timingSafeEqual(candidateHash, expectedHash),
+        );
       });
     });
   }
