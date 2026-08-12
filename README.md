@@ -54,5 +54,6 @@ npm run test:e2e
 
 The application has safe local defaults. Copy `.env.example` to `.env` when you
 want to override the API port, browser origin, JWT secret, or demo credentials.
-Environment-file loading and persistent PostgreSQL users will be introduced with
-the employee-management foundation.
+A production deployment must provide a JWT secret containing at least 32
+characters. Persistent PostgreSQL users will be introduced with the
+employee-management foundation.

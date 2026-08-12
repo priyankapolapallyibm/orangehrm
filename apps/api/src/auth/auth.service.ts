@@ -1,4 +1,5 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { scryptSync, timingSafeEqual } from 'node:crypto';
 import { LoginDto } from './dto/login.dto';
@@ -14,11 +15,16 @@ export interface AuthenticatedUser {
 
 @Injectable()
 export class AuthService {
-  constructor(private readonly jwtService: JwtService) {}
+  constructor(
+    private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
+  ) {}
 
   login(credentials: LoginDto) {
-    const username = process.env.DEMO_ADMIN_USERNAME ?? 'Admin';
-    const password = process.env.DEMO_ADMIN_PASSWORD ?? 'admin123';
+    const username =
+      this.configService.get<string>('DEMO_ADMIN_USERNAME') ?? 'Admin';
+    const password =
+      this.configService.get<string>('DEMO_ADMIN_PASSWORD') ?? 'admin123';
 
     if (
       credentials.username !== username ||
