@@ -19,4 +19,24 @@ describe('validateEnvironment', () => {
       }),
     ).toThrow('JWT_SECRET must contain at least 32 characters in production');
   });
+
+  it('requires explicit administrator credentials in production', () => {
+    expect(() =>
+      validateEnvironment({
+        NODE_ENV: 'production',
+        JWT_SECRET: 'a-production-secret-with-32-characters',
+      }),
+    ).toThrow('DEMO_ADMIN_USERNAME is required in production');
+
+    expect(() =>
+      validateEnvironment({
+        NODE_ENV: 'production',
+        JWT_SECRET: 'a-production-secret-with-32-characters',
+        DEMO_ADMIN_USERNAME: 'peopleflow-admin',
+        DEMO_ADMIN_PASSWORD: 'short',
+      }),
+    ).toThrow(
+      'DEMO_ADMIN_PASSWORD must contain at least 12 characters in production',
+    );
+  });
 });

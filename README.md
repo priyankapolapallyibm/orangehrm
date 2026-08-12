@@ -55,5 +55,7 @@ npm run test:e2e
 The application has safe local defaults. Copy `.env.example` to `.env` when you
 want to override the API port, browser origin, JWT secret, or demo credentials.
 A production deployment must provide a JWT secret containing at least 32
-characters. Persistent PostgreSQL users will be introduced with the
+characters and explicit administrator credentials with a password of at least
+12 characters. The public local credentials are not accepted as implicit
+production defaults. Persistent PostgreSQL users will be introduced with the
 employee-management foundation.

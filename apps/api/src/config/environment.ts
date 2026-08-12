@@ -17,6 +17,24 @@ export function validateEnvironment(
     );
   }
 
+  if (
+    environment.NODE_ENV === 'production' &&
+    (typeof environment.DEMO_ADMIN_USERNAME !== 'string' ||
+      environment.DEMO_ADMIN_USERNAME.trim().length === 0)
+  ) {
+    throw new Error('DEMO_ADMIN_USERNAME is required in production');
+  }
+
+  if (
+    environment.NODE_ENV === 'production' &&
+    (typeof environment.DEMO_ADMIN_PASSWORD !== 'string' ||
+      environment.DEMO_ADMIN_PASSWORD.length < 12)
+  ) {
+    throw new Error(
+      'DEMO_ADMIN_PASSWORD must contain at least 12 characters in production',
+    );
+  }
+
   return {
     ...environment,
     PORT: port,
