@@ -18,6 +18,13 @@ describe('validateEnvironment', () => {
         JWT_SECRET: 'short',
       }),
     ).toThrow('JWT_SECRET must contain at least 32 characters in production');
+
+    expect(() =>
+      validateEnvironment({
+        NODE_ENV: 'production',
+        JWT_SECRET: 'replace-with-a-long-random-value',
+      }),
+    ).toThrow('JWT_SECRET must contain at least 32 characters in production');
   });
 
   it('requires explicit administrator credentials in production', () => {

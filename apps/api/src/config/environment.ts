@@ -1,6 +1,7 @@
 export function validateEnvironment(
   environment: Record<string, unknown>,
 ): Record<string, unknown> {
+  const jwtSecret = environment.JWT_SECRET;
   const port = Number(environment.PORT ?? 3000);
 
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
@@ -9,8 +10,9 @@ export function validateEnvironment(
 
   if (
     environment.NODE_ENV === 'production' &&
-    (typeof environment.JWT_SECRET !== 'string' ||
-      environment.JWT_SECRET.length < 32)
+    (typeof jwtSecret !== 'string' ||
+      jwtSecret.length < 32 ||
+      jwtSecret === 'replace-with-a-long-random-value')
   ) {
     throw new Error(
       'JWT_SECRET must contain at least 32 characters in production',
