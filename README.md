@@ -10,6 +10,10 @@ current first release includes:
 - An authenticated dashboard shell
 - SQLite persistence with Prisma migrations and seed data
 - Employee listing, search, creation, editing, and deletion
+- Leave requests with overlap validation and approval or rejection
+- Recruitment vacancies and candidate pipeline management
+- User account creation, employee linking, roles, and access control
+- Navigation placeholders for Time, Performance, Directory, and Claims
 - Backend unit and API integration tests
 - Frontend component tests
 
@@ -44,6 +48,51 @@ Password: admin123
 
 The API health endpoint is available at `http://localhost:3000/api/health`.
 
+## Available APIs
+
+All HR endpoints require a Bearer token. Mutation and administration operations
+require the `ADMIN` role.
+
+| Area                | Endpoints                                                                                                                                                                    |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Authentication      | `POST /api/auth/login`                                                                                                                                                       |
+| Employees           | `GET/POST /api/employees`, `GET/PATCH/DELETE /api/employees/:id`                                                                                                             |
+| Leave               | `GET/POST /api/leave-requests`, `PATCH /api/leave-requests/:id/status`                                                                                                       |
+| Recruitment         | `GET/POST /api/recruitment/vacancies`, `PATCH /api/recruitment/vacancies/:id/status`, `GET/POST /api/recruitment/candidates`, `PATCH /api/recruitment/candidates/:id/status` |
+| User administration | `GET/POST /api/users`, `PATCH /api/users/:id`                                                                                                                                |
+
+## Start with containers
+
+Docker or another Compose-compatible container runtime is required:
+
+```powershell
+docker compose up --build
+```
+
+Open `http://localhost:8080` and use the same local administrator credentials.
+The Compose application builds separate web and API images, runs database
+migrations and seed data once, waits for API health, and persists SQLite data in
+the `peopleflow-data` volume.
+
+Inspect service health and logs:
+
+```powershell
+docker compose ps
+docker compose logs --follow api web
+```
+
+Stop services without deleting employee data:
+
+```powershell
+docker compose down
+```
+
+Delete the local container database only when a full reset is intended:
+
+```powershell
+docker compose down --volumes
+```
+
 ## Commands
 
 ```powershell
@@ -66,4 +115,6 @@ production defaults.
 The current local database is SQLite at `apps/api/prisma/dev.db`. It is generated
 locally and is not committed. Prisma migrations and seed data are committed so
 each developer and CI run can recreate the same database. PostgreSQL will replace
-SQLite when the hosted Dev environment is introduced.
+SQLite when the hosted Dev environment is introduced. The interim container
+configuration intentionally runs a single API replica with a persistent volume;
+it is not the final horizontally scaled Azure database architecture.

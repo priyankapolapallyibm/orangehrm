@@ -4,10 +4,14 @@ import { JwtService } from '@nestjs/jwt';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
+import { PrismaService } from './../src/database/prisma.service';
+
+jest.setTimeout(30_000);
 
 describe('AppController (e2e)', () => {
   let app: INestApplication<App>;
   let jwtService: JwtService;
+  let prisma: PrismaService;
 
   async function loginAsAdmin(): Promise<string> {
     const response = await request(app.getHttpServer())
@@ -25,6 +29,7 @@ describe('AppController (e2e)', () => {
 
     app = moduleFixture.createNestApplication();
     jwtService = moduleFixture.get(JwtService);
+    prisma = moduleFixture.get(PrismaService);
     app.setGlobalPrefix('api');
     app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
     await app.init();
@@ -124,27 +129,195 @@ describe('AppController (e2e)', () => {
     return request(app.getHttpServer()).get('/api/employees').expect(401);
   });
 
-  it('/api/employees rejects mutations from employee accounts', () => {
+  it('rejects signed tokens for accounts that do not exist', () => {
     const token = jwtService.sign({
-      sub: 999,
-      username: 'employee.test',
+      sub: 2_147_483_647,
+      username: 'missing.user',
+      role: 'ADMIN',
+    });
+    return request(app.getHttpServer())
+      .get('/api/users')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(401);
+  });
+
+  it('/api/employees rejects mutations from employee accounts', async () => {
+    const username = `employee.test.${Date.now()}`;
+    const employeeAccount = await prisma.user.create({
+      data: {
+        username,
+        passwordHash: 'not-used',
+        passwordSalt: 'not-used',
+        displayName: 'Employee Test',
+        role: 'EMPLOYEE',
+      },
+    });
+    const token = jwtService.sign({
+      sub: employeeAccount.id,
+      username,
       role: 'EMPLOYEE',
     });
 
-    return request(app.getHttpServer())
-      .post('/api/employees')
-      .set('Authorization', `Bearer ${token}`)
-      .send({
-        employeeNumber: 'EMP-FORBIDDEN',
-        firstName: 'Forbidden',
-        lastName: 'Mutation',
-        email: 'forbidden@example.test',
-        jobTitle: 'Employee',
-        department: 'Testing',
-        employmentStatus: 'ACTIVE',
-        dateOfJoining: '2026-08-12',
-      })
-      .expect(403);
+    try {
+      await request(app.getHttpServer())
+        .post('/api/employees')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          employeeNumber: 'EMP-FORBIDDEN',
+          firstName: 'Forbidden',
+          lastName: 'Mutation',
+          email: 'forbidden@example.test',
+          jobTitle: 'Employee',
+          department: 'Testing',
+          employmentStatus: 'ACTIVE',
+          dateOfJoining: '2026-08-12',
+        })
+        .expect(403);
+    } finally {
+      await prisma.user.delete({ where: { id: employeeAccount.id } });
+    }
+  });
+
+  it('supports leave, recruitment, and account administration workflows', async () => {
+    const token = await loginAsAdmin();
+    const suffix = Date.now();
+    let employeeId: number | undefined;
+    let leaveId: number | undefined;
+    let vacancyId: number | undefined;
+    let candidateId: number | undefined;
+    let userId: number | undefined;
+
+    try {
+      const employeeResponse = await request(app.getHttpServer())
+        .post('/api/employees')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          employeeNumber: `EMP-HR-${suffix}`,
+          firstName: 'Workflow',
+          lastName: 'Tester',
+          email: `workflow-${suffix}@example.test`,
+          jobTitle: 'HR Test Specialist',
+          department: 'Human Resources',
+          employmentStatus: 'ACTIVE',
+          dateOfJoining: '2026-08-13',
+        })
+        .expect(201);
+      employeeId = (employeeResponse.body as { id: number }).id;
+
+      const leaveResponse = await request(app.getHttpServer())
+        .post('/api/leave-requests')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          employeeId,
+          leaveType: 'ANNUAL',
+          startDate: '2035-01-10',
+          endDate: '2035-01-12',
+          reason: 'Planned annual leave',
+        })
+        .expect(201);
+      leaveId = (leaveResponse.body as { id: number }).id;
+
+      await request(app.getHttpServer())
+        .patch(`/api/leave-requests/${leaveId}/status`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ status: 'APPROVED' })
+        .expect(200)
+        .expect((response) => {
+          expect((response.body as { status: string }).status).toBe('APPROVED');
+        });
+
+      const vacancyResponse = await request(app.getHttpServer())
+        .post('/api/recruitment/vacancies')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          title: `QA Engineer ${suffix}`,
+          department: 'Quality Assurance',
+          description: 'Test automation and quality engineering',
+          positions: 2,
+        })
+        .expect(201);
+      vacancyId = (vacancyResponse.body as { id: number }).id;
+
+      const candidateResponse = await request(app.getHttpServer())
+        .post('/api/recruitment/candidates')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          vacancyId,
+          firstName: 'Candidate',
+          lastName: 'Tester',
+          email: `candidate-${suffix}@example.test`,
+        })
+        .expect(201);
+      candidateId = (candidateResponse.body as { id: number }).id;
+
+      await request(app.getHttpServer())
+        .patch(`/api/recruitment/candidates/${candidateId}/status`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ status: 'INTERVIEW' })
+        .expect(200)
+        .expect((response) => {
+          expect((response.body as { status: string }).status).toBe(
+            'INTERVIEW',
+          );
+        });
+
+      const userResponse = await request(app.getHttpServer())
+        .post('/api/users')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          username: `workflow.user.${suffix}`,
+          password: 'temporary-password',
+          displayName: 'Workflow User',
+          role: 'EMPLOYEE',
+          employeeId,
+        })
+        .expect(201);
+      userId = (userResponse.body as { id: number }).id;
+      expect(userResponse.body).not.toHaveProperty('passwordHash');
+
+      await request(app.getHttpServer())
+        .post('/api/users')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          username: `invalid.user.${suffix}`,
+          password: 'temporary-password',
+          displayName: 'Invalid User',
+          role: 'EMPLOYEE',
+          employeeId: 0,
+        })
+        .expect(400);
+
+      await request(app.getHttpServer())
+        .patch(`/api/users/${userId}`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ active: false })
+        .expect(200)
+        .expect((response) => {
+          expect((response.body as { active: boolean }).active).toBe(false);
+        });
+
+      const disabledToken = jwtService.sign({
+        sub: userId,
+        username: `workflow.user.${suffix}`,
+        role: 'EMPLOYEE',
+      });
+      await request(app.getHttpServer())
+        .get('/api/employees')
+        .set('Authorization', `Bearer ${disabledToken}`)
+        .expect(401);
+    } finally {
+      if (userId) await prisma.user.delete({ where: { id: userId } });
+      if (candidateId) {
+        await prisma.candidate.delete({ where: { id: candidateId } });
+      }
+      if (vacancyId) await prisma.vacancy.delete({ where: { id: vacancyId } });
+      if (leaveId) {
+        await prisma.leaveRequest.delete({ where: { id: leaveId } });
+      }
+      if (employeeId) {
+        await prisma.employee.delete({ where: { id: employeeId } });
+      }
+    }
   });
 
   afterEach(async () => {
