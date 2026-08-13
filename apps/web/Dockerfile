@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-ARG NODE_VERSION=24.13.1
+ARG NODE_VERSION=24.19.0
 
 FROM node:${NODE_VERSION}-alpine AS build
 WORKDIR /workspace

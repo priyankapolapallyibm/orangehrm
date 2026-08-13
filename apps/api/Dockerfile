@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-ARG NODE_VERSION=24.13.1
+ARG NODE_VERSION=24.19.0
 
 FROM node:${NODE_VERSION}-alpine AS dependencies
 WORKDIR /workspace
@@ -32,7 +32,12 @@ COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/package.json
 COPY apps/web/package.json apps/web/package.json
 RUN npm ci --omit=dev --workspace api --include-workspace-root \
-    && npm cache clean --force
+    && npm cache clean --force \
+    && rm -rf /usr/local/lib/node_modules/npm \
+        /usr/local/lib/node_modules/corepack \
+        /usr/local/bin/npm \
+        /usr/local/bin/npx \
+        /usr/local/bin/corepack
 
 COPY --from=build /workspace/node_modules/.prisma /workspace/node_modules/.prisma
 COPY --from=build /workspace/apps/api/dist /workspace/apps/api/dist
