@@ -17,6 +17,10 @@ FROM nginxinc/nginx-unprivileged:1.29-alpine AS runtime
 ENV API_UPSTREAM=http://api:3000 \
     NGINX_ENVSUBST_FILTER=^API_UPSTREAM$
 
+USER root
+RUN apk upgrade --no-cache
+USER nginx
+
 COPY apps/web/nginx/default.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=build /workspace/apps/web/dist /usr/share/nginx/html
 
