@@ -1,0 +1,35 @@
+name: peopleflow-dev
+
+services:
+  migrate:
+    env_file:
+      - .env.dev
+    environment:
+      NODE_ENV: production
+    volumes:
+      - ${DEV_DATA_VOLUME:-peopleflow-dev-data}:/data
+
+  api:
+    env_file:
+      - .env.dev
+    environment:
+      NODE_ENV: production
+      WEB_ORIGIN: ${WEB_ORIGIN}
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      DEMO_ADMIN_USERNAME: ${DEMO_ADMIN_USERNAME}
+      DEMO_ADMIN_PASSWORD: ${DEMO_ADMIN_PASSWORD}
+    volumes:
+      - ${DEV_DATA_VOLUME:-peopleflow-dev-data}:/data
+
+  web:
+    env_file:
+      - .env.dev
+    environment:
+      API_UPSTREAM: ${API_UPSTREAM}
+    ports:
+      - "${DEV_WEB_PORT:-8080}:8080"
+
+volumes:
+  peopleflow-dev-data:
+    name: ${DEV_DATA_VOLUME:-peopleflow-dev-data}

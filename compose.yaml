@@ -1,0 +1,51 @@
+name: peopleflow
+
+services:
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: migrate
+    environment:
+      DATABASE_URL: file:/data/peopleflow.db
+      DEMO_ADMIN_USERNAME: ${DEMO_ADMIN_USERNAME:-Admin}
+      DEMO_ADMIN_PASSWORD: ${DEMO_ADMIN_PASSWORD:-admin123}
+      NODE_ENV: development
+    volumes:
+      - peopleflow-data:/data
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: runtime
+    environment:
+      DATABASE_URL: file:/data/peopleflow.db
+      JWT_SECRET: ${JWT_SECRET:-local-container-secret-change-before-deploy}
+      NODE_ENV: development
+      PORT: 3000
+      WEB_ORIGIN: http://localhost:8080
+    volumes:
+      - peopleflow-data:/data
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: runtime
+    environment:
+      API_UPSTREAM: http://api:3000
+    ports:
+      - "8080:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  peopleflow-data:

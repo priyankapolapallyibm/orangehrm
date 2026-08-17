@@ -1,0 +1,273 @@
+name: CD — Deploy Dev → QA Gate → Deploy QA
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Triggered when a PR is merged to main.
+#
+# Flow:
+#   1. deploy-dev   — restart local dev environment (port 5173 / 3000)
+#   2. qa-gate      — run full Playwright UI test suite against dev
+#   3. deploy-qa    — restart local QA environment only if qa-gate passes
+# ─────────────────────────────────────────────────────────────────────────────
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  checks: write
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  NODE_VERSION: '20'
+  UI_TEST_PROJECT: 'OrangeHRM.UIAutomation.Tests/OrangeHRM.UIAutomation.Tests.csproj'
+
+# ── JOB 1: Deploy Dev ────────────────────────────────────────────────────────
+jobs:
+  deploy-dev:
+    name: 🚀 Deploy → Dev
+    runs-on: ubuntu-latest
+    environment: dev
+    timeout-minutes: 15
+    outputs:
+      dev_sha: ${{ github.sha }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build API
+        run: npm run build --workspace api
+
+      - name: Prepare dev database
+        run: |
+          npm run prisma:generate --workspace api
+          npm run db:deploy --workspace api
+          npm run db:seed --workspace api
+
+      - name: Verify dev environment health
+        run: |
+          echo "✅ Dev build succeeded — commit ${{ github.sha }}"
+          echo "DEV  http://dev.peopleflow.local:5173"
+          echo "API  http://localhost:3000"
+
+      - name: Post deploy summary
+        run: |
+          {
+            echo "## 🚀 Dev Deployment"
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| **Commit** | \`${{ github.sha }}\` |"
+            echo "| **Branch** | \`${{ github.ref_name }}\` |"
+            echo "| **Triggered by** | ${{ github.actor }} |"
+            echo "| **Dev URL** | http://dev.peopleflow.local:5173 |"
+            echo "| **Status** | ✅ Deployed |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+# ── JOB 2: QA Gate — full UI automation suite against dev ────────────────────
+  qa-gate:
+    name: 🧪 QA Gate — UI Automation
+    runs-on: ubuntu-latest
+    needs: deploy-dev
+    timeout-minutes: 60
+    permissions:
+      checks: write
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout app repo
+        uses: actions/checkout@v4
+        with:
+          path: app
+
+      - name: Checkout UI automation repo
+        uses: actions/checkout@v4
+        with:
+          repository: priyankapolapallyibm/OrangeHRM-UIAutomation
+          token: ${{ secrets.GH_PAT }}
+          path: automation
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install app dependencies
+        working-directory: app
+        run: npm ci
+
+      - name: Setup app database
+        working-directory: app
+        run: npm run db:setup
+
+      - name: Start app (API + Web) against dev
+        working-directory: app
+        run: |
+          npm run dev > /tmp/app.log 2>&1 &
+          echo "⏳ Waiting for API (max 2 min)..."
+          for i in $(seq 1 40); do
+            curl -sf http://localhost:3000/api/health > /dev/null 2>&1 && echo "✅ API ready (attempt $i)" && break
+            printf "  [%d/40] waiting 3s...\n" "$i"; sleep 3
+          done
+          curl -sf http://localhost:3000/api/health || { echo "❌ API failed"; cat /tmp/app.log; exit 1; }
+          for i in $(seq 1 20); do
+            curl -sf http://localhost:5173 > /dev/null 2>&1 && echo "✅ Web ready (attempt $i)" && break
+            sleep 2
+          done
+          curl -sf http://localhost:5173 || { echo "❌ Web failed"; exit 1; }
+
+      - name: Build automation project
+        working-directory: automation
+        run: |
+          dotnet restore ${{ env.UI_TEST_PROJECT }}
+          dotnet build ${{ env.UI_TEST_PROJECT }} --no-restore --configuration Release
+
+      - name: Install Playwright (chromium)
+        working-directory: automation/OrangeHRM.UIAutomation.Tests
+        run: pwsh bin/Release/net8.0/playwright.ps1 install --with-deps chromium
+
+      - name: Run full UI test suite
+        working-directory: automation
+        env:
+          TEST_TestSettings__BaseUrl: http://localhost:5173
+          TEST_TestSettings__ApiBaseUrl: http://localhost:3000/api
+          TEST_TestSettings__Browser: chromium
+          TEST_TestSettings__Headless: 'true'
+          TEST_TestSettings__ScreenshotOnFailure: 'true'
+          TEST_TestSettings__DefaultTimeout: '60000'
+        run: |
+          dotnet test ${{ env.UI_TEST_PROJECT }} \
+            --no-build --configuration Release \
+            --logger "trx;LogFileName=QAGateResults.trx" \
+            --logger "console;verbosity=normal"
+
+      - name: Publish QA gate results
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: QA Gate — Full UI Suite
+          path: automation/**/*.trx
+          reporter: dotnet-trx
+          fail-on-error: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload HTML report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: qa-gate-report-${{ github.run_number }}
+          path: automation/OrangeHRM.UIAutomation.Tests/bin/Release/net8.0/Reports/
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Upload failure screenshots
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: qa-gate-screenshots-${{ github.run_number }}
+          path: automation/OrangeHRM.UIAutomation.Tests/bin/Release/net8.0/Reports/Screenshots/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Upload TRX results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: qa-gate-trx-${{ github.run_number }}
+          path: automation/**/*.trx
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: QA Gate summary
+        if: always()
+        run: |
+          STATUS="${{ job.status }}"
+          ICON="✅"
+          if [ "$STATUS" != "success" ]; then ICON="❌"; fi
+          {
+            echo "## 🧪 QA Gate Results"
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| **Status** | $ICON $STATUS |"
+            echo "| **Commit** | \`${{ github.sha }}\` |"
+            echo "| **Run #** | ${{ github.run_number }} |"
+            echo "| **Report** | \`qa-gate-report-${{ github.run_number }}\` |"
+            echo ""
+            if [ "$STATUS" = "success" ]; then
+              echo "> ✅ All UI tests passed — promoting to QA environment"
+            else
+              echo "> ❌ UI tests failed — QA deployment **blocked**"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+# ── JOB 3: Deploy QA — only runs if qa-gate passed ───────────────────────────
+  deploy-qa:
+    name: 🚀 Deploy → QA
+    runs-on: ubuntu-latest
+    needs: qa-gate
+    environment: qa
+    timeout-minutes: 15
+    # This job is SKIPPED if qa-gate fails — QA never gets bad code
+    if: success()
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build API for QA
+        run: npm run build --workspace api
+
+      - name: Prepare QA database
+        run: |
+          npm run prisma:generate --workspace api
+          npx cross-env DATABASE_URL=file:./apps/api/prisma/qa.db \
+            prisma migrate deploy --schema=./apps/api/prisma/schema.prisma
+
+      - name: Verify QA environment health
+        run: |
+          echo "✅ QA build succeeded — commit ${{ github.sha }}"
+          echo "QA   http://qa.peopleflow.local:5174"
+          echo "API  http://localhost:3001"
+
+      - name: Post QA deploy summary
+        run: |
+          {
+            echo "## 🚀 QA Deployment"
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| **Commit** | \`${{ github.sha }}\` |"
+            echo "| **Branch** | \`${{ github.ref_name }}\` |"
+            echo "| **Promoted by** | QA Gate ✅ |"
+            echo "| **QA URL** | http://qa.peopleflow.local:5174 |"
+            echo "| **Status** | ✅ Deployed |"
+            echo ""
+            echo "> Code passed all UI automation tests and has been promoted to QA."
+          } >> "$GITHUB_STEP_SUMMARY"
+

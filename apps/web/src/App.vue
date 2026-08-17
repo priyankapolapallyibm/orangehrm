@@ -1,45 +1,103 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import EmployeeManager from './components/EmployeeManager.vue'
-import { login, type User } from './services/auth'
+import { ref } from "vue";
+import EmployeeManager from "./components/EmployeeManager.vue";
+import LeaveManager from "./components/LeaveManager.vue";
+import RecruitmentManager from "./components/RecruitmentManager.vue";
+import UserManager from "./components/UserManager.vue";
+import { login, type User } from "./services/auth";
 
-const username = ref('')
-const password = ref('')
-const error = ref('')
-const loading = ref(false)
-const currentUser = ref<User | null>(null)
-const accessToken = ref('')
-const currentPage = ref<'dashboard' | 'employees'>('dashboard')
+const username = ref("");
+const password = ref("");
+const error = ref("");
+const loading = ref(false);
+const currentUser = ref<User | null>(null);
+const accessToken = ref("");
+type Page = "dashboard" | "admin" | "employees" | "leave" | "recruitment";
+const currentPage = ref<Page>("dashboard");
 
 const modules = [
-  { name: 'Employees', description: 'Manage employee profiles', icon: 'PE' },
-  { name: 'Leave', description: 'Requests and approvals', icon: 'LV' },
-  { name: 'Attendance', description: 'Track working time', icon: 'AT' },
-  { name: 'Recruitment', description: 'Candidates and vacancies', icon: 'RC' },
-]
+  {
+    name: "Admin",
+    page: "admin",
+    description: "Users, roles, and access",
+    icon: "AD",
+    available: true,
+  },
+  {
+    name: "Employees",
+    page: "employees",
+    description: "Manage employee profiles",
+    icon: "PE",
+    available: true,
+  },
+  {
+    name: "Leave",
+    page: "leave",
+    description: "Requests and approvals",
+    icon: "LV",
+    available: true,
+  },
+  {
+    name: "Recruitment",
+    page: "recruitment",
+    description: "Candidates and vacancies",
+    icon: "RC",
+    available: true,
+  },
+  {
+    name: "Time",
+    page: null,
+    description: "Attendance and timesheets",
+    icon: "TM",
+    available: false,
+  },
+  {
+    name: "Performance",
+    page: null,
+    description: "Reviews and goals",
+    icon: "PF",
+    available: false,
+  },
+  {
+    name: "Directory",
+    page: null,
+    description: "Organization directory",
+    icon: "DR",
+    available: false,
+  },
+  {
+    name: "Claims",
+    page: null,
+    description: "Expense claims",
+    icon: "CL",
+    available: false,
+  },
+];
 
 async function submitLogin() {
-  error.value = ''
-  loading.value = true
+  error.value = "";
+  loading.value = true;
 
   try {
-    const response = await login(username.value.trim(), password.value)
-    currentUser.value = response.user
-    accessToken.value = response.accessToken
-    password.value = ''
+    const response = await login(username.value.trim(), password.value);
+    currentUser.value = response.user;
+    accessToken.value = response.accessToken;
+    password.value = "";
   } catch (requestError) {
     error.value =
-      requestError instanceof Error ? requestError.message : 'Unable to sign in.'
+      requestError instanceof Error
+        ? requestError.message
+        : "Unable to sign in.";
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
 function logout() {
-  currentUser.value = null
-  accessToken.value = ''
-  currentPage.value = 'dashboard'
-  username.value = ''
+  currentUser.value = null;
+  accessToken.value = "";
+  currentPage.value = "dashboard";
+  username.value = "";
 }
 </script>
 
@@ -66,7 +124,9 @@ function logout() {
         </div>
         <p class="eyebrow accent">Secure workspace</p>
         <h2>Sign in</h2>
-        <p class="form-intro">Enter your administrator credentials to continue.</p>
+        <p class="form-intro">
+          Enter your administrator credentials to continue.
+        </p>
 
         <label for="username">Username</label>
         <input
@@ -92,7 +152,7 @@ function logout() {
         <p v-if="error" class="error-message" role="alert">{{ error }}</p>
 
         <button type="submit" :disabled="loading">
-          {{ loading ? 'Signing in...' : 'Sign in' }}
+          {{ loading ? "Signing in..." : "Sign in" }}
         </button>
 
         <div class="demo-credentials">
@@ -122,9 +182,9 @@ function logout() {
           v-for="module in modules"
           :key="module.name"
           type="button"
-          :class="{ active: currentPage === 'employees' && module.name === 'Employees' }"
-          :disabled="module.name !== 'Employees'"
-          @click="module.name === 'Employees' && (currentPage = 'employees')"
+          :class="{ active: currentPage === module.page }"
+          :disabled="!module.available"
+          @click="module.page && (currentPage = module.page as Page)"
         >
           {{ module.name }}
         </button>
@@ -137,15 +197,17 @@ function logout() {
           <p class="eyebrow accent">Administrator workspace</p>
           <h1>Good day, {{ currentUser.displayName }}</h1>
         </div>
-        <button class="secondary-button" type="button" @click="logout">Sign out</button>
+        <button class="secondary-button" type="button" @click="logout">
+          Sign out
+        </button>
       </header>
 
       <section class="welcome-card">
         <div>
           <h2>Your HR workspace is ready</h2>
           <p>
-            This first release includes authentication and the application shell.
-            Employee management will be the next functional module.
+            Employee, leave, recruitment, and user administration workflows are
+            available from this workspace.
           </p>
         </div>
         <span class="status-badge">Local environment</span>
@@ -157,17 +219,19 @@ function logout() {
           <article
             v-for="module in modules"
             :key="module.name"
-            :class="{ available: module.name === 'Employees' }"
-            @click="module.name === 'Employees' && (currentPage = 'employees')"
+            :class="{ available: module.available }"
+            @click="module.page && (currentPage = module.page as Page)"
           >
-            <span class="module-icon" aria-hidden="true">{{ module.icon }}</span>
+            <span class="module-icon" aria-hidden="true">{{
+              module.icon
+            }}</span>
             <h3>{{ module.name }}</h3>
             <p>{{ module.description }}</p>
             <button
-              v-if="module.name === 'Employees'"
+              v-if="module.available"
               class="text-button"
               type="button"
-              @click.stop="currentPage = 'employees'"
+              @click.stop="module.page && (currentPage = module.page as Page)"
             >
               Open module
             </button>
@@ -177,7 +241,20 @@ function logout() {
       </section>
     </main>
     <main v-else class="dashboard">
-      <EmployeeManager :token="accessToken" />
+      <EmployeeManager
+        v-if="currentPage === 'employees'"
+        :token="accessToken"
+      />
+      <LeaveManager v-else-if="currentPage === 'leave'" :token="accessToken" />
+      <RecruitmentManager
+        v-else-if="currentPage === 'recruitment'"
+        :token="accessToken"
+      />
+      <UserManager
+        v-else-if="currentPage === 'admin'"
+        :token="accessToken"
+        :current-user-id="currentUser.id"
+      />
     </main>
   </div>
 </template>

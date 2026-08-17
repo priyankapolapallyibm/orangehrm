@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:qa": "vite --config vite.config.qa.ts",
     "build": "vue-tsc -b && vite build",
     "preview": "vite preview",
     "test": "vitest run"

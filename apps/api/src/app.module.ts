@@ -7,6 +7,9 @@ import { AuthModule } from './auth/auth.module';
 import { validateEnvironment } from './config/environment';
 import { DatabaseModule } from './database/database.module';
 import { EmployeesModule } from './employees/employees.module';
+import { LeaveModule } from './leave/leave.module';
+import { RecruitmentModule } from './recruitment/recruitment.module';
+import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
@@ -24,6 +27,9 @@ import { EmployeesModule } from './employees/employees.module';
     DatabaseModule,
     AuthModule,
     EmployeesModule,
+    LeaveModule,
+    RecruitmentModule,
+    UsersModule,
   ],
   controllers: [AppController],
   providers: [

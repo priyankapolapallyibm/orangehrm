@@ -7,16 +7,22 @@
   ],
   "scripts": {
     "dev": "concurrently -n API,WEB -c blue,green \"npm run start:dev --workspace api\" \"npm run dev --workspace web\"",
+    "start:dev": "concurrently -n API,WEB -c blue,green \"npm run start:dev --workspace api\" \"npm run dev --workspace web\"",
+    "start:qa": "concurrently -n API-QA,WEB-QA -c cyan,yellow \"npm run start:qa --workspace api\" \"npm run dev:qa --workspace web\"",
     "build": "npm run build --workspaces",
     "test": "npm run test --workspaces --if-present",
     "test:e2e": "npm run test:e2e --workspace api",
     "lint": "npm run lint --workspaces --if-present",
-    "db:setup": "npm run prisma:generate --workspace api && npm run db:deploy --workspace api && npm run db:seed --workspace api"
+    "db:setup": "npm run prisma:generate --workspace api && npm run db:deploy --workspace api && npm run db:seed --workspace api",
+    "db:setup:qa": "npm run prisma:generate --workspace api && npm run db:deploy:qa --workspace api && npm run db:seed:qa --workspace api"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"
   },
   "engines": {
     "node": ">=20"
+  },
+  "dependencies": {
+    "playwright": "^1.62.1"
   }
 }
