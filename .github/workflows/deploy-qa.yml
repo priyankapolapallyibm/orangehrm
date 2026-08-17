@@ -1,0 +1,48 @@
+name: Deploy QA
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-qa:
+    runs-on: ubuntu-latest
+    environment: qa
+    steps:
+      - name: Deploy to Oracle Cloud VM via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.QA_VM_HOST }}
+          username: ${{ secrets.QA_VM_USER }}
+          key: ${{ secrets.QA_VM_SSH_KEY }}
+          script: |
+            set -e
+            cd /opt/peopleflow
+
+            # Pull latest code
+            git pull origin main
+
+            # Write environment file (never committed to git)
+            cat > .env.qa <<'ENVEOF'
+            COMPOSE_PROJECT_NAME=peopleflow-qa
+            NODE_ENV=production
+            JWT_SECRET=${{ secrets.QA_JWT_SECRET }}
+            DEMO_ADMIN_USERNAME=${{ secrets.QA_ADMIN_USERNAME }}
+            DEMO_ADMIN_PASSWORD=${{ secrets.QA_ADMIN_PASSWORD }}
+            WEB_ORIGIN=http://${{ secrets.QA_VM_HOST }}:8081
+            API_UPSTREAM=http://api:3000
+            DATABASE_URL=file:/data/peopleflow.db
+            QA_WEB_PORT=8081
+            QA_DATA_VOLUME=peopleflow-qa-data
+            ENVEOF
+
+            # Build and deploy
+            bash scripts/deploy-linux.sh qa
+
+      - name: Health check qa
+        run: |
+          sleep 15
+          curl --fail --retry 5 --retry-delay 5 \
+            http://${{ secrets.QA_VM_HOST }}:8081/health

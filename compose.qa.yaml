@@ -1,0 +1,35 @@
+name: peopleflow-qa
+
+services:
+  migrate:
+    env_file:
+      - .env.qa
+    environment:
+      NODE_ENV: production
+    volumes:
+      - ${QA_DATA_VOLUME:-peopleflow-qa-data}:/data
+
+  api:
+    env_file:
+      - .env.qa
+    environment:
+      NODE_ENV: production
+      WEB_ORIGIN: ${WEB_ORIGIN}
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      DEMO_ADMIN_USERNAME: ${DEMO_ADMIN_USERNAME}
+      DEMO_ADMIN_PASSWORD: ${DEMO_ADMIN_PASSWORD}
+    volumes:
+      - ${QA_DATA_VOLUME:-peopleflow-qa-data}:/data
+
+  web:
+    env_file:
+      - .env.qa
+    environment:
+      API_UPSTREAM: ${API_UPSTREAM}
+    ports:
+      - "${QA_WEB_PORT:-8081}:8080"
+
+volumes:
+  peopleflow-qa-data:
+    name: ${QA_DATA_VOLUME:-peopleflow-qa-data}
