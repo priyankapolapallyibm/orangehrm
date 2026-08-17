@@ -112,7 +112,7 @@ function logout() {
           A practical HR platform for employees, leave, attendance, and recruitment.
         </p>
       </div>
-      <p class="copyright">Local development environment</p>
+      <p class="copyright">Local development workspace</p>
     </section>
 
     <section class="form-panel">
