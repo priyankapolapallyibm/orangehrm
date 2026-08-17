@@ -168,6 +168,7 @@ jobs:
           path: automation/**/*.trx
           reporter: dotnet-trx
           fail-on-error: true
+          working-directory: app
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload HTML report

@@ -4,6 +4,7 @@ import { JwtService } from '@nestjs/jwt';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
+import { AUTH_LOGIN_RATE_LIMIT } from './../src/auth/auth.controller';
 import { PrismaService } from './../src/database/prisma.service';
 
 jest.setTimeout(30_000);
@@ -65,7 +66,7 @@ describe('AppController (e2e)', () => {
   });
 
   it('/api/auth/login rate limits repeated attempts', async () => {
-    for (let attempt = 0; attempt < 5; attempt += 1) {
+    for (let attempt = 0; attempt < AUTH_LOGIN_RATE_LIMIT; attempt += 1) {
       await request(app.getHttpServer())
         .post('/api/auth/login')
         .send({ username: 'Admin', password: 'wrong' })
