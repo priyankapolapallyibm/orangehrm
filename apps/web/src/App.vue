@@ -109,8 +109,7 @@ function logout() {
         <p class="eyebrow">People operations, simplified</p>
         <h1>Welcome to PeopleFlow</h1>
         <p class="brand-copy">
-          A learning-focused HR platform for employees, leave, attendance, and
-          recruitment.
+          A practical HR platform for employees, leave, attendance, and recruitment.
         </p>
       </div>
       <p class="copyright">Local development environment</p>

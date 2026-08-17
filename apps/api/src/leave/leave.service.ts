@@ -37,7 +37,7 @@ export class LeaveService {
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
         return await this.prisma.$transaction(
-          async (transaction) => {
+          async (transaction: Prisma.TransactionClient) => {
             const overlapping = await transaction.leaveRequest.findFirst({
               where: {
                 employeeId: input.employeeId,
@@ -57,7 +57,6 @@ export class LeaveService {
               include: { employee: true },
             });
           },
-          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable as any },
         );
       } catch (error) {
         if (
