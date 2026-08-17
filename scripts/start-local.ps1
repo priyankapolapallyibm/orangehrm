@@ -141,12 +141,16 @@ Write-Host "=============================="
 Write-Host "  PeopleFlow Environments"
 Write-Host "=============================="
 if ($Env -eq "dev" -or $Env -eq "both") {
-    Write-Host "  DEV  -> http://localhost:5173"
+    Write-Host "  DEV  -> http://dev.peopleflow.local:5173"
     Write-Host "         Login: Admin / admin123"
 }
 if ($Env -eq "qa" -or $Env -eq "both") {
-    Write-Host "  QA   -> http://localhost:5174"
+    Write-Host "  QA   -> http://qa.peopleflow.local:5174"
     Write-Host "         Login: Admin / admin123"
 }
+Write-Host ""
+Write-Host "  NOTE: Run .\scripts\setup-local-urls.ps1 as Admin"
+Write-Host "        to enable the named URLs (hosts file setup)."
+Write-Host "  Fallback: http://localhost:5173 and http://localhost:5174"
 Write-Host ""
 Write-Host "  Stop all: .\scripts\start-local.ps1 -Stop"
