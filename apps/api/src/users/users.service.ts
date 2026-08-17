@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { randomBytes, scrypt } from 'node:crypto';
 import { PrismaService } from '../database/prisma.service';
 import { CreateUserDto, UpdateUserDto } from './dto/user.dto';
@@ -65,7 +66,7 @@ export class UsersService {
       return this.sanitize(user);
     } catch (error) {
       if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error instanceof PrismaClientKnownRequestError &&
         error.code === 'P2002'
       ) {
         throw new ConflictException(
@@ -73,7 +74,7 @@ export class UsersService {
         );
       }
       if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error instanceof PrismaClientKnownRequestError &&
         error.code === 'P2003'
       ) {
         throw new NotFoundException('Employee not found');
