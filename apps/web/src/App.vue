@@ -112,7 +112,7 @@ function logout() {
           A practical HR platform for employees, leave, attendance, and recruitment.
         </p>
       </div>
-      <p class="copyright">Local development workspace — QA pipeline-ready</p>
+      <p class="copyright">Local development workspace — pipeline verification ready</p>
     </section>
 
     <section class="form-panel">
