@@ -46,7 +46,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: priyankapolapallyibm/OrangeHRM-UIAutomation
-          token: ${{ secrets.GH_PAT }}
           path: automation
 
       - name: Setup .NET
