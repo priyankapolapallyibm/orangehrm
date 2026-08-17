@@ -5,7 +5,7 @@ name: CD — Deploy Dev → QA Gate → Deploy QA
 #
 # Flow:
 #   1. deploy-dev   — restart local dev environment (port 5173 / 3000)
-#   2. qa-gate      — run full Playwright UI test suite against dev
+#   2. qa-gate      — run @Smoke Playwright UI test suite against dev
 #   3. deploy-qa    — restart local QA environment only if qa-gate passes
 # ─────────────────────────────────────────────────────────────────────────────
 on:
@@ -271,4 +271,3 @@ jobs:
             echo ""
             echo "> Code passed all UI automation tests and has been promoted to QA."
           } >> "$GITHUB_STEP_SUMMARY"
-
