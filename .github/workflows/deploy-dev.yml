@@ -76,10 +76,10 @@ jobs:
 
 # ── JOB 2: QA Gate — full UI automation suite against dev ────────────────────
   qa-gate:
-    name: 🧪 QA Gate — UI Automation
+    name: 🧪 QA Gate — @Smoke Suite (~8 min)
     runs-on: ubuntu-latest
     needs: deploy-dev
-    timeout-minutes: 60
+    timeout-minutes: 20
     permissions:
       checks: write
       contents: read
@@ -144,7 +144,7 @@ jobs:
         working-directory: automation/OrangeHRM.UIAutomation.Tests
         run: pwsh bin/Release/net8.0/playwright.ps1 install --with-deps chromium
 
-      - name: Run full UI test suite
+      - name: Run @Smoke UI tests (QA gate — fast)
         working-directory: automation
         env:
           TEST_TestSettings__BaseUrl: http://localhost:5173
@@ -156,6 +156,7 @@ jobs:
         run: |
           dotnet test ${{ env.UI_TEST_PROJECT }} \
             --no-build --configuration Release \
+            --filter "Category=Smoke" \
             --logger "trx;LogFileName=QAGateResults.trx" \
             --logger "console;verbosity=normal"
 
@@ -163,7 +164,7 @@ jobs:
         uses: dorny/test-reporter@v1
         if: always()
         with:
-          name: QA Gate — Full UI Suite
+          name: QA Gate — @Smoke Suite
           path: automation/**/*.trx
           reporter: dotnet-trx
           fail-on-error: true

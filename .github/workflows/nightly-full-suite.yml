@@ -1,0 +1,173 @@
+name: Nightly — Full UI Automation Suite
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Runs every night at 22:00 UTC (all 30 scenarios, no @Smoke filter).
+# Also runnable manually via workflow_dispatch for on-demand full regression.
+#
+# Optimization 2: The QA gate on deploy-dev runs only @Smoke (~10 tests, ~8 min).
+# This scheduled workflow runs the full suite to catch regression outside the
+# fast-feedback loop without blocking every PR deployment.
+# ─────────────────────────────────────────────────────────────────────────────
+on:
+  schedule:
+    - cron: '0 22 * * *'    # 22:00 UTC daily
+  workflow_dispatch:
+    inputs:
+      filter:
+        description: 'dotnet test --filter expression (leave blank for all tests)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+  checks: write
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  NODE_VERSION: '20'
+  UI_TEST_PROJECT: 'OrangeHRM.UIAutomation.Tests/OrangeHRM.UIAutomation.Tests.csproj'
+
+jobs:
+  full-regression:
+    name: 🔬 Full Regression — All 30 Scenarios
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      checks: write
+      contents: read
+
+    steps:
+      - name: Checkout app repo
+        uses: actions/checkout@v4
+        with:
+          path: app
+
+      - name: Checkout UI automation repo
+        uses: actions/checkout@v4
+        with:
+          repository: priyankapolapallyibm/OrangeHRM-UIAutomation
+          token: ${{ secrets.GH_PAT }}
+          path: automation
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install app dependencies
+        working-directory: app
+        run: npm ci
+
+      - name: Setup app database
+        working-directory: app
+        run: npm run db:setup
+
+      - name: Start app (API + Web)
+        working-directory: app
+        run: |
+          npm run dev > /tmp/app.log 2>&1 &
+          echo "⏳ Waiting for API..."
+          for i in $(seq 1 40); do
+            curl -sf http://localhost:3000/api/health > /dev/null 2>&1 && echo "✅ API ready" && break
+            sleep 3
+          done
+          curl -sf http://localhost:3000/api/health || { echo "❌ API failed"; cat /tmp/app.log; exit 1; }
+          for i in $(seq 1 20); do
+            curl -sf http://localhost:5173 > /dev/null 2>&1 && echo "✅ Web ready" && break
+            sleep 2
+          done
+          curl -sf http://localhost:5173 || { echo "❌ Web failed"; exit 1; }
+
+      - name: Build automation project
+        working-directory: automation
+        run: |
+          dotnet restore ${{ env.UI_TEST_PROJECT }}
+          dotnet build ${{ env.UI_TEST_PROJECT }} --no-restore --configuration Release
+
+      - name: Install Playwright (chromium)
+        working-directory: automation/OrangeHRM.UIAutomation.Tests
+        run: pwsh bin/Release/net8.0/playwright.ps1 install --with-deps chromium
+
+      - name: Run full UI test suite
+        working-directory: automation
+        env:
+          TEST_TestSettings__BaseUrl: http://localhost:5173
+          TEST_TestSettings__ApiBaseUrl: http://localhost:3000/api
+          TEST_TestSettings__Browser: chromium
+          TEST_TestSettings__Headless: 'true'
+          TEST_TestSettings__ScreenshotOnFailure: 'true'
+          TEST_TestSettings__DefaultTimeout: '60000'
+        run: |
+          FILTER="${{ github.event.inputs.filter }}"
+          if [ -n "$FILTER" ]; then
+            echo "Running with filter: $FILTER"
+            dotnet test ${{ env.UI_TEST_PROJECT }} \
+              --no-build --configuration Release \
+              --filter "$FILTER" \
+              --logger "trx;LogFileName=NightlyResults.trx" \
+              --logger "console;verbosity=normal"
+          else
+            echo "Running ALL tests (no filter)"
+            dotnet test ${{ env.UI_TEST_PROJECT }} \
+              --no-build --configuration Release \
+              --logger "trx;LogFileName=NightlyResults.trx" \
+              --logger "console;verbosity=normal"
+          fi
+
+      - name: Publish nightly results
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: Nightly — Full UI Suite
+          path: automation/**/*.trx
+          reporter: dotnet-trx
+          fail-on-error: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload HTML report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nightly-report-${{ github.run_number }}
+          path: automation/OrangeHRM.UIAutomation.Tests/bin/Release/net8.0/Reports/
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Upload failure screenshots
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: nightly-screenshots-${{ github.run_number }}
+          path: automation/OrangeHRM.UIAutomation.Tests/bin/Release/net8.0/Reports/Screenshots/
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Nightly run summary
+        if: always()
+        run: |
+          STATUS="${{ job.status }}"
+          ICON="✅"
+          if [ "$STATUS" != "success" ]; then ICON="❌"; fi
+          {
+            echo "## 🔬 Nightly Full Regression"
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| **Status** | $ICON $STATUS |"
+            echo "| **Run** | ${{ github.run_number }} — $(date -u +'%Y-%m-%d %H:%M UTC') |"
+            echo "| **Scenarios** | All 30 (Auth 5 · Admin 6 · Employee 8 · Leave 5 · Recruitment 6) |"
+            echo "| **Report** | nightly-report-${{ github.run_number }} |"
+            if [ "$STATUS" = "success" ]; then
+              echo ""
+              echo "> ✅ All scenarios passed"
+            else
+              echo ""
+              echo "> ❌ Failures detected — review screenshots in nightly-screenshots-${{ github.run_number }}"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
