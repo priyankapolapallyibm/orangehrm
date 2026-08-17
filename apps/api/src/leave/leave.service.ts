@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { PrismaService } from '../database/prisma.service';
 import { CreateLeaveRequestDto, ReviewLeaveRequestDto } from './dto/leave.dto';
 
@@ -56,17 +57,17 @@ export class LeaveService {
               include: { employee: true },
             });
           },
-          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable as any },
         );
       } catch (error) {
         if (
-          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error instanceof PrismaClientKnownRequestError &&
           error.code === 'P2003'
         ) {
           throw new NotFoundException('Employee not found');
         }
         const retryable =
-          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error instanceof PrismaClientKnownRequestError &&
           error.code === 'P2034';
         if (!retryable || attempt === 1) {
           if (retryable) {
