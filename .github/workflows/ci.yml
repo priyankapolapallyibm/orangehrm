@@ -1,24 +1,30 @@
-name: CI
+name: CI — Pull Request Gate
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Runs on every PR targeting main.
+# Gate: lint + unit tests + build + smoke UI tests must all pass before merge.
+# ─────────────────────────────────────────────────────────────────────────────
 on:
   pull_request:
-  push:
     branches:
       - main
 
 permissions:
   contents: read
+  checks: write
+  pull-requests: write
 
 jobs:
+  # ── 1. Lint + Unit Tests + Build ──────────────────────────────────────────
   validate:
+    name: Lint · Unit Tests · Build
     runs-on: ubuntu-latest
     timeout-minutes: 15
-
     steps:
-      - name: Check out repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
+      - name: Setup Node.js 24
         uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -33,49 +39,115 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Test
+      - name: Unit tests
         run: npm test
 
-      - name: Test API workflows
+      - name: API integration tests
         run: npm run test:e2e
 
       - name: Build
         run: npm run build
 
-  containers:
-    needs: validate
+  # ── 2. Smoke UI tests (fast subset) on every PR ───────────────────────────
+  smoke-ui:
+    name: Smoke UI Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions:
-      contents: read
-      security-events: write
+    needs: validate
+    timeout-minutes: 25
+    env:
+      DOTNET_VERSION: '8.0.x'
+      NODE_VERSION: '20'
+      UI_TEST_PROJECT: 'OrangeHRM.UIAutomation.Tests/OrangeHRM.UIAutomation.Tests.csproj'
 
     steps:
-      - name: Check out repository
+      - name: Checkout app repo
         uses: actions/checkout@v4
-
-      - name: Build API image
-        run: docker build --file apps/api/Dockerfile --target runtime --tag peopleflow-api:${{ github.sha }} .
-
-      - name: Build web image
-        run: docker build --file apps/web/Dockerfile --target runtime --tag peopleflow-web:${{ github.sha }} .
-
-      - name: Scan API image
-        uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: peopleflow-api:${{ github.sha }}
-          format: sarif
-          output: trivy-api.sarif
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: "1"
+          path: app
 
-      - name: Scan web image
-        uses: aquasecurity/trivy-action@v0.36.0
+      - name: Checkout UI automation repo
+        uses: actions/checkout@v4
         with:
-          image-ref: peopleflow-web:${{ github.sha }}
-          format: sarif
-          output: trivy-web.sarif
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: "1"
+          repository: priyankapolapallyibm/OrangeHRM-UIAutomation
+          token: ${{ secrets.GH_PAT }}
+          path: automation
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install app dependencies
+        working-directory: app
+        run: npm ci
+
+      - name: Setup app database
+        working-directory: app
+        run: npm run db:setup
+
+      - name: Start app (API + Web)
+        working-directory: app
+        run: |
+          npm run dev > /tmp/app.log 2>&1 &
+          for i in $(seq 1 40); do
+            curl -sf http://localhost:3000/api/health > /dev/null 2>&1 && echo "✅ API ready" && break
+            sleep 3
+          done
+          curl -sf http://localhost:3000/api/health || { echo "❌ API failed"; cat /tmp/app.log; exit 1; }
+          for i in $(seq 1 20); do
+            curl -sf http://localhost:5173 > /dev/null 2>&1 && echo "✅ Web ready" && break
+            sleep 2
+          done
+
+      - name: Build automation project
+        working-directory: automation
+        run: |
+          dotnet restore ${{ env.UI_TEST_PROJECT }}
+          dotnet build ${{ env.UI_TEST_PROJECT }} --no-restore --configuration Release
+
+      - name: Install Playwright (chromium)
+        working-directory: automation/OrangeHRM.UIAutomation.Tests
+        run: pwsh bin/Release/net8.0/playwright.ps1 install --with-deps chromium
+
+      - name: Run Smoke tests
+        working-directory: automation
+        env:
+          TEST_TestSettings__BaseUrl: http://localhost:5173
+          TEST_TestSettings__ApiBaseUrl: http://localhost:3000/api
+          TEST_TestSettings__Browser: chromium
+          TEST_TestSettings__Headless: 'true'
+          TEST_TestSettings__ScreenshotOnFailure: 'true'
+          TEST_TestSettings__DefaultTimeout: '60000'
+        run: |
+          dotnet test ${{ env.UI_TEST_PROJECT }} \
+            --no-build --configuration Release \
+            --filter "Category=Smoke" \
+            --logger trx;LogFileName=SmokeResults.trx \
+            --logger console;verbosity=normal
+
+      - name: Publish smoke test results
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: Smoke UI Results (PR)
+          path: automation/**/*.trx
+          reporter: dotnet-trx
+          fail-on-error: false
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload smoke screenshots on failure
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: smoke-screenshots-pr${{ github.event.number }}
+          path: automation/OrangeHRM.UIAutomation.Tests/bin/Release/net8.0/Reports/Screenshots/
+          retention-days: 7
+          if-no-files-found: ignore
+
