@@ -88,8 +88,6 @@ jobs:
     steps:
       - name: Checkout app repo
         uses: actions/checkout@v4
-        with:
-          path: app
 
       - name: Checkout UI automation repo
         uses: actions/checkout@v4
@@ -108,18 +106,15 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-          cache-dependency-path: app/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install app dependencies
-        working-directory: app
         run: npm ci
 
       - name: Setup app database
-        working-directory: app
         run: npm run db:setup
 
       - name: Start app (API + Web) against dev
-        working-directory: app
         run: |
           npm run dev > /tmp/app.log 2>&1 &
           echo "⏳ Waiting for API (max 2 min)..."
