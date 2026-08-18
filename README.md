@@ -17,6 +17,9 @@ current first release includes:
 - Backend unit and API integration tests
 - Frontend component tests
 
+The repository also includes automated Dev and QA pipeline workflows so each
+application change can be validated through the delivery flow.
+
 ## Prerequisites
 
 - Node.js 20 or later
