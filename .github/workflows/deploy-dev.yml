@@ -165,9 +165,10 @@ jobs:
         if: always()
         with:
           name: QA Gate — @Smoke Suite
-          path: automation/**/*.trx
+          path: ../automation/**/*.trx
           reporter: dotnet-trx
           fail-on-error: true
+          working-directory: app
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload HTML report
