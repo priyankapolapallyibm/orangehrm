@@ -3,7 +3,6 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { PrismaService } from '../database/prisma.service';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { ListEmployeesDto } from './dto/list-employees.dto';
